@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
 
 
 void main() {
@@ -32,14 +33,18 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+   final TextEditingController _latController = TextEditingController(text: '-15.8122093');
+   final TextEditingController _longController = TextEditingController(text: '-48.0229043');   
 
+  String _currentLat = '';
+  String _currentLong = '';
   @override
   void initState() {
     super.initState();
     _initializeNotifications();
+    _getCurrentLocation(); 
   }
 
   Future<void> _initializeNotifications() async {
@@ -51,11 +56,79 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+  Future<void> _getCurrentLocation() async {
+    // Verifica a permissão de localização
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      // Obtém a localização atual
+      try {
+        Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        
+        // Atualiza a latitude e longitude atuais
+        setState(() {
+          _currentLat = position.latitude.toString();
+          _currentLong = position.longitude.toString();
+        });
+      } catch (e) {
+        print('Erro ao obter a localização: $e');
+        setState(() {
+          _currentLat = 'Erro ao obter';
+          _currentLong = 'Erro ao obter';
+        });
+      }
+    } else {
+      print('Permissão de localização negada.');
+      setState(() {
+        _currentLat = 'Permissão negada';
+        _currentLong = 'Permissão negada';
+      });
+    }
+  }
+  Future<void> _checkLocationAndNotify() async {
+    double latitude = double.tryParse(_latController.text) ?? 0;
+    double longitude = double.tryParse(_longController.text) ?? 0;
+
+    // Obtém a localização atual novamente
+    await _getCurrentLocation();
+
+    // Verifica a permissão de localização
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      // Obtém a localização atual
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      // Atualiza a latitude e longitude atuais
+      setState(() {
+        _currentLat = position.latitude.toString();
+        _currentLong = position.longitude.toString();
+      });
+      print(_currentLat);
+      print(_currentLong);
+      // Verifica se a localização atual está dentro de um pequeno intervalo da latitude e longitude fornecidas
+      if ((position.latitude - latitude).abs() < 0.001 && (position.longitude - longitude).abs() < 0.001) {
+        _showNotification();
+      } else {
+        print('Você não está na localização desejada.');
+      }
+      // Atualiza os campos com os valores mais recentes
+      _latController.text = _currentLat;
+      _longController.text = _currentLong;
+    } else {
+      print('Permissão de localização negada.');
+    }
   }    
 
   void _incrementCounter() {
     setState(() {
-      _counter++;
+      // _counter++;
     });
     _showNotification(); // Chama a função de notificação ao incrementar
   }
@@ -76,8 +149,8 @@ class _MyHomePageState extends State<MyHomePage> {
     
     await flutterLocalNotificationsPlugin.show(
       0,
-      'Título da Notificação',
-      'Corpo da Notificação',
+      'Localizacao disparada',
+      'Localizacao correta mesmo local',
       platformChannelSpecifics,
       payload: 'item x',
     );
@@ -91,18 +164,31 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(widget.title),
       ),
       body: Center(
+        child:Padding(padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+            TextField(
+              controller: _longController,
+              decoration: const InputDecoration(labelText: 'Longitude'),
+              keyboardType: TextInputType.number,
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            TextField(
+              controller: _latController,
+              decoration: const InputDecoration(labelText: 'Latitude'),
+              keyboardType: TextInputType.number,
             ),
+            ElevatedButton(
+              onPressed: _checkLocationAndNotify,
+              child: const Text('Verificar Localização'),
+            ),
+            const SizedBox(height: 20),
+              // Exibindo a latitude e longitude atuais
+              Text('Sua Latitude: $_currentLat'),
+              Text('Sua Longitude: $_currentLong'),
           ],
         ),
+        )
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _incrementCounter,
